@@ -1,0 +1,53 @@
+# Environment files and credentials
+.env
+.env.*
+!.env.example
+!**/.env.example
+backend/app/.env
+
+# Dependencies and Python virtual environments
+node_modules/
+.venv/
+venv/
+env/
+ENV/
+virtualenv/
+.tox/
+.nox/
+
+# Python and tooling caches
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Frontend/build/test outputs
+.next/
+dist/
+build/
+coverage/
+htmlcov/
+.coverage
+.coverage.*
+
+# Private keys and certificates
+*.pem
+*.key
+*.p12
+*.pfx
+
+# Local database dumps and backups (keep source SQL migrations trackable)
+*.dump
+*.dump.*
+*.sql.gz
+*.bak
+*.backup
+*.old
+*.sqlite
+*.sqlite3
+*.db
+
+# Frontend local outputs retained from the existing setup
+frontend/out/
+frontend/.env.local
