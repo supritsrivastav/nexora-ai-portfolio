@@ -1,5 +1,7 @@
-export const API_ROOT = (process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8080/api")
-  .replace(/\/+$/, "");
+// Browser requests stay on the frontend origin. Next.js proxies /api/* to the
+// server-configured backend, keeping backend deployment details out of the
+// client bundle and allowing the HttpOnly session cookie to remain first-party.
+export const API_ROOT = "/api";
 
 export type AuthUser = {
   id: string;

@@ -36,7 +36,7 @@ class ConfigurationTests(unittest.TestCase):
             "DB_USER": "app",
             "DB_PASSWORD": "test-secret-value",
             "GOOGLE_API_KEY": "test-api-key",
-            "REDIS_URL": "redis://cache:6379/0",
+            "REDIS_URL": "rediss://cache.example:6379/0",
             "FRONTEND_ORIGINS": "https://app.example",
             "AUTH_SESSION_TTL_HOURS": "12",
             "AUTH_COOKIE_SECURE": "true",
@@ -51,10 +51,18 @@ class ConfigurationTests(unittest.TestCase):
             self.assertNotIn("test-secret-value", str(error.exception))
 
     def test_development_memory_backend_requires_one_worker(self):
-        with patch.dict(os.environ, {"RATE_LIMIT_BACKEND": "memory", "WEB_CONCURRENCY": "1"}), \
+        values = {
+            "DB_HOST": "db.example", "DB_PORT": "5432", "DB_NAME": "app",
+            "DB_USER": "app", "DB_PASSWORD": "test-secret-value",
+            "GOOGLE_API_KEY": "test-api-key", "FRONTEND_ORIGINS": "http://localhost:3000",
+            "AUTH_SESSION_TTL_HOURS": "12", "AUTH_COOKIE_SECURE": "false",
+            "DB_SSLMODE": "disable", "RATE_LIMIT_BACKEND": "memory", "WEB_CONCURRENCY": "1",
+        }
+        with patch.dict(os.environ, values, clear=True), \
              patch.object(config, "APP_ENV", "development"):
             config.validate_settings()
-        with patch.dict(os.environ, {"RATE_LIMIT_BACKEND": "memory", "WEB_CONCURRENCY": "2"}), \
+        values["WEB_CONCURRENCY"] = "2"
+        with patch.dict(os.environ, values, clear=True), \
              patch.object(config, "APP_ENV", "development"):
             with self.assertRaisesRegex(RuntimeError, "WEB_CONCURRENCY=1"):
                 config.validate_settings()
@@ -83,6 +91,30 @@ class ConfigurationTests(unittest.TestCase):
         with patch.dict(os.environ, values, clear=True), patch.object(config, "APP_ENV", "production"):
             with self.assertRaisesRegex(RuntimeError, "REDIS_URL"):
                 config.validate_settings()
+
+    def test_production_rejects_non_tls_redis_url(self):
+        values = {
+            "DB_HOST": "db.example", "DB_PORT": "5432", "DB_NAME": "app",
+            "DB_USER": "app", "DB_PASSWORD": "test-secret-value",
+            "GOOGLE_API_KEY": "test-api-key", "FRONTEND_ORIGINS": "https://app.example",
+            "AUTH_SESSION_TTL_HOURS": "12", "AUTH_COOKIE_SECURE": "true",
+            "DB_SSLMODE": "require", "RATE_LIMIT_BACKEND": "redis",
+            "REDIS_URL": "redis://cache.example:6379/0",
+        }
+        with patch.dict(os.environ, values, clear=True), patch.object(config, "APP_ENV", "production"):
+            with self.assertRaisesRegex(RuntimeError, "rediss:// TLS"):
+                config.validate_settings()
+
+    def test_development_memory_rate_limit_remains_valid(self):
+        values = {
+            "DB_HOST": "db.example", "DB_PORT": "5432", "DB_NAME": "app",
+            "DB_USER": "app", "DB_PASSWORD": "test-secret-value",
+            "GOOGLE_API_KEY": "test-api-key", "FRONTEND_ORIGINS": "http://localhost:3000",
+            "AUTH_SESSION_TTL_HOURS": "12", "AUTH_COOKIE_SECURE": "false",
+            "DB_SSLMODE": "disable", "RATE_LIMIT_BACKEND": "memory", "WEB_CONCURRENCY": "1",
+        }
+        with patch.dict(os.environ, values, clear=True), patch.object(config, "APP_ENV", "development"):
+            config.validate_settings()
 
 
 if __name__ == "__main__":

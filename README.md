@@ -38,7 +38,7 @@ npm.cmd ci
 npm.cmd run dev
 ```
 
-The frontend defaults to `http://localhost:8080/api`. To change it, set `NEXT_PUBLIC_API_URL` in `frontend/.env.local` (copy from `frontend/.env.example`). This value is public configuration; never put secrets in a `NEXT_PUBLIC_` variable.
+The browser uses the same-origin `/api` path. Next.js proxies those requests to `BACKEND_API_URL`, which defaults to `http://localhost:8080/api` for local development. This backend address is server-side configuration; do not prefix it with `NEXT_PUBLIC_` or put credentials in it.
 
 ## Local production-like Compose stack
 
@@ -68,11 +68,27 @@ Stop the services with `docker compose down`. This preserves database and Redis 
 | `RATE_LIMIT_BACKEND` | `memory` for one local development worker; `redis` for production and multiple workers |
 | `WEB_CONCURRENCY` | Declared ASGI worker count; memory rate limiting requires exactly `1` |
 | `REDIS_URL` | Shared Redis connection when `RATE_LIMIT_BACKEND=redis`; supports authenticated/TLS Redis URLs |
-| `NEXT_PUBLIC_API_URL` | Public browser API URL only; never a credential |
+| `BACKEND_API_URL` | Server-side Next.js rewrite destination, including the backend `/api` base path; not a secret and never a `NEXT_PUBLIC_` variable |
 
 Auth endpoints allow 10 requests per minute per client IP; chat and classification allow 20 per minute per client IP. Local development defaults to the process-local memory backend and one worker, so Redis does not need to be running. Memory counters are local to one process and are rejected in production and when `WEB_CONCURRENCY` is greater than one. Production requires `RATE_LIMIT_BACKEND=redis`; Redis counters use atomic operations and are shared across workers and instances. Redis failures return HTTP 503 and never fall back to memory. Configure trusted proxy forwarding at the ASGI server or enforce per-client limits at the edge; do not trust arbitrary client-supplied forwarding headers.
 
-Production deployment must provide TLS, a managed or persistent PostgreSQL service with an already provisioned schema, a shared Redis service, `RATE_LIMIT_BACKEND=redis`, explicit HTTPS frontend origins, secure cookie settings, and secret injection through the hosting platform. Choose and configure a trusted reverse proxy before enabling forwarded client addresses. No external deployment target is assumed here.
+Production deployment must provide TLS, a managed or persistent PostgreSQL service with an already provisioned schema, a shared TLS-enabled Redis service (`rediss://`), `RATE_LIMIT_BACKEND=redis`, explicit HTTPS frontend origins, secure cookie settings, and secret injection through the hosting platform. Choose and configure a trusted reverse proxy before enabling forwarded client addresses. No external deployment is performed by this project.
+
+## Vercel and Render deployment configuration
+
+The root `render.yaml` describes the native Python service. In Render, create the service from this Blueprint, review its environment-variable prompts, and provide the backend settings through Render's environment UI. Render supplies `PORT`; the configured start command binds Uvicorn to it. The readiness check is `/health/ready`. Set `FRONTEND_ORIGINS` to the exact Vercel production origin and any explicitly approved preview origins. Use a TLS Redis connection URL; production rejects `redis://`.
+
+In Vercel, set the project root directory to `frontend` and use the detected Next.js framework with `npm ci` and `npm run build`. Set the server-side `BACKEND_API_URL` environment variable for **Production and each Preview environment** to the Render backend's `/api` base URL, without a trailing slash. This setting is consumed by Next.js rewrites and is not a browser variable. Set it before each Vercel build; do not create `NEXT_PUBLIC_API_URL` and do not put secrets in Vercel frontend variables.
+
+Browser API calls then remain on the Vercel origin and Next.js forwards `/api/*` to Render. The browser retains the host-only, HttpOnly, Secure, SameSite=Lax session cookie on the frontend origin; the proxy forwards it to the API and returns `Set-Cookie` responses. Keep the existing backend trusted-origin allowlist exact and aligned with the browser frontend origins. This proxy arrangement does not relax cookie settings or CORS.
+
+The application does not apply SQL automatically. For a fresh production database, use the complete schema baseline described below. The numbered SQL files remain available for the older migration path and must not be applied after that baseline.
+
+### Fresh production database bootstrap
+
+`backend/sql/production_schema.sql` is the schema-only baseline extracted from the authoritative local schema export. It initializes a completely fresh production database with `support_tickets`, `users`, `auth_sessions`, their constraints and indexes, and the support ticket sequence. It contains no local records, ownership clauses, or privileges. The `gen_random_uuid()` defaults require a modern PostgreSQL version that provides that function (built in since PostgreSQL 13).
+
+**Do not apply `backend/sql/001_auth_tables.sql` or `backend/sql/002_ticket_ownership.sql` after `production_schema.sql`.** The production baseline already includes `users`, `auth_sessions`, and ticket ownership. The numbered SQL files are for the existing migration path when starting from a database that has the older ticket schema; they are not an additional step after this complete baseline. Apply this bootstrap only through an approved database change process to a separate, empty production database.
 
 ## Health endpoints
 

@@ -116,7 +116,10 @@ def validate_settings() -> None:
     else:
         redis_url = get_required_env("REDIS_URL") if APP_ENV == "production" else get_redis_url()
         redis_parts = urlsplit(redis_url)
-        if redis_parts.scheme not in {"redis", "rediss"} or not redis_parts.hostname:
+        allowed_redis_schemes = {"rediss"} if APP_ENV == "production" else {"redis", "rediss"}
+        if redis_parts.scheme not in allowed_redis_schemes or not redis_parts.hostname:
+            if APP_ENV == "production":
+                raise RuntimeError("Production REDIS_URL must use rediss:// TLS.")
             raise RuntimeError("REDIS_URL must be a valid redis:// or rediss:// URL.")
 
     if APP_ENV == "production":

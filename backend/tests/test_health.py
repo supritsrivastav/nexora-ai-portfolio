@@ -9,7 +9,9 @@ from app.main import app
 
 class HealthEndpointTests(unittest.TestCase):
     def test_liveness_does_not_depend_on_database(self):
-        with TestClient(app, base_url="http://localhost") as client:
+        with patch("app.main.validate_settings"), \
+             patch.dict(os.environ, {"RATE_LIMIT_BACKEND": "memory"}), \
+             TestClient(app, base_url="http://localhost") as client:
             self.assertEqual(client.get("/health/live").status_code, 200)
             self.assertEqual(client.get("/health").status_code, 200)
 
@@ -37,7 +39,8 @@ class HealthEndpointTests(unittest.TestCase):
             def cursor(self):
                 return Cursor()
 
-        with patch.dict(os.environ, {"RATE_LIMIT_BACKEND": "redis", "REDIS_URL": "redis://localhost:6379/0"}):
+        with patch("app.main.validate_settings"), \
+             patch.dict(os.environ, {"RATE_LIMIT_BACKEND": "redis", "REDIS_URL": "redis://localhost:6379/0"}):
             with TestClient(app, base_url="http://localhost") as client:
                 with patch.object(client.app.state.redis, "ping", new_callable=AsyncMock, return_value=True), \
                      patch("app.main.get_connection", return_value=Connection()):
